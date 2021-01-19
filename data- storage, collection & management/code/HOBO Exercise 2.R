@@ -22,12 +22,12 @@ library(rio)
 library(zoo) # rollapply
 ```
 
-Loading data
+Loading-in data
 
 ```{r data upload, message=FALSE, warning=FALSE}
 
 rm(list=ls(all=TRUE))
-df <- read_csv("C:/Users/neiss/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/10347371.csv")
+df <- read_csv("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/10347371.csv")
 
 
 df <- as.tibble(df)
@@ -155,7 +155,7 @@ dfh <- df %>%
 
 ```{r import reference staions}
 
-rs_wbi <- read_delim("C:/Users/neiss/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/WBI Stunde_096.csv",
+rs_wbi <- read_delim("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/WBI Stunde_096.csv",
                     delim = ';',
                     locale=locale(decimal_mark = ","),
                     col_types = cols( 
@@ -168,14 +168,14 @@ rs_wbi <- rs_wbi %>% rename(date = Tag, hour = Stunde, th = AVG_TA200)
 
 #______________________________________________________________________________
 
-rs_umg <- read_csv("C:/Users/neiss/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/Freiburg_Garten_2020-11-30_2020-12-20.csv")
+rs_umg <- read_csv("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/Freiburg_Garten_2020-11-30_2020-12-20.csv")
 
 rs_umg <- rs_umg %>% rename(date_time = UTC, th = `Lufttemperatur (°C)`) %>% 
   select(- Lokalzeit)
 
 #______________________________________________________________________________
 
-rs_dwdfu <- read_delim("C:/Users/neiss/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/produkt_air_temperature_13667_akt.txt", 
+rs_dwdfu <- read_delim("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/produkt_air_temperature_13667_akt.txt", 
                        delim = ";",
                        escape_double = FALSE,
                        col_types = cols(
@@ -190,7 +190,7 @@ rs_dwdfu <- rs_dwdfu %>% rename(date_time = MESS_DATUM,
 
 #______________________________________________________________________________
 
-rs_dwdff <- read_delim("C:/Users/neiss/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/produkt_tu_stunde_20190713_20210112_01443.txt",
+rs_dwdff <- read_delim("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/produkt_tu_stunde_20190713_20210112_01443.txt",
                        delim = ";",
                        escape_double = FALSE,
                        col_types = cols(
@@ -237,7 +237,10 @@ dfh_umg <- dfh %>%
          predict(model_umg,
                  newdata = rs_umg),
          th)) %>%
-  select(date_time, th, origin)
+  select(date_time, th, origin) %>% 
+  rename(date = date_time)
+
+any(is.na(dfh_umg$th))
 
 ```
 
@@ -246,8 +249,17 @@ dfh_umg <- dfh %>%
 
 ```{r}
 
+write.csv(dfh_umg,
+          'C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/10347371_TH.csv', row.names = FALSE , quote=F)
+
+```
+
+
+
+```{r}
+
 pth <- dfh_umg %>% 
-  ggplot(mapping = aes(x = date_time,
+  ggplot(mapping = aes(x = date,
                        y = th,
                        color = th,
                        fill = th))
