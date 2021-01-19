@@ -1,0 +1,60 @@
+DROP VIEW IF EXISTS dfv;
+CREATE VIEW dfv AS
+SELECT *
+FROM data d
+JOIN metadata m ON m.id=d.meta_id
+WHERE 
+	variable_id=1
+ORDER BY meta_id;
+SELECT *
+FROM dfv;
+
+
+DROP VIEW IF EXISTS temp_indices;  
+CREATE VIEW temp_indices AS 
+SELECT 
+	meta_id,
+	atd,
+	atn,
+	tavg,
+	atdiff
+FROM
+(SELECT
+	*,
+	td.atd - tn.atn AS atdiff
+	
+	FROM
+(SELECT 
+	meta_id,
+	avg (value) AS atd
+FROM dfv
+WHERE (date_part('hour', tstamp ) >= '6' 
+	AND date_part('hour', tstamp) < '18')
+GROUP BY meta_id) as td
+
+JOIN 
+
+(SELECT 
+	meta_id AS id_tn,
+	avg (value) atn
+FROM dfv
+WHERE (date_part('hour', tstamp ) < '6' 
+	OR date_part('hour', tstamp) >= '18')
+GROUP BY meta_id) as tn 
+
+
+ON tn.id_tn=td.meta_id
+JOIN
+
+(SELECT 
+	meta_id AS id_tavg,
+	avg(value) AS tavg
+FROM dfv
+GROUP BY meta_id
+) toavg
+
+ON toavg.id_tavg=td.meta_id
+) AS t1;
+
+SELECT *
+FROM temp_indices
