@@ -233,8 +233,8 @@ dfh_umg %>%
 
 
 ```{r uploading data into github}
-write.csv(dfh_umg,
-          'C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/10347371_TH.csv', row.names = FALSE , quote=F)
+#write.csv(dfh_umg,
+#          'C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/10347371_TH.csv', row.names = FALSE , quote=F)
 ```
 
 
