@@ -1,0 +1,240 @@
+---
+title: "HOBO Exercise 2"
+author: "Neisse N; neisse.n@protonmail.com"
+date: "08/01/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Setting stage
+
+Packages in use
+
+```{r packages, message=FALSE, warning=FALSE}
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(rmarkdown)
+library(rio)
+library(zoo) # rollapply
+```
+
+Loading-in data
+
+```{r data upload, message=FALSE, warning=FALSE}
+rm(list=ls(all=TRUE))
+df <- read_csv("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/10347371.csv")
+df <- as.tibble(df)
+```
+
+
+## 1. Quality contcol procedure (QCP)
+
+Exploratory data analysis: Graphs
+
+```{r data visualisation, echo=FALSE}
+df %>% 
+  ggplot(mapping = aes(x = date_time,
+                       y = temp,
+                       color = temp,
+                       fill = temp))  %>% 
+  + geom_line() + scale_color_gradient2(low = "darkblue",
+  mid = "darkgrey",
+  high = "darkred",
+  midpoint = 0)
+
+df %>% 
+  ggplot(mapping = aes(x = date_time,
+                       y = lux,
+                       color = lux,
+                       fill = lux)) %>% 
+  + geom_line() + scale_color_gradient2(low = "black", 
+                                         mid = "darkgrey",
+                                         high = "darkred",
+                                         midpoint = 1000)
+```
+
+#### 1.1 Respect to plausible temperature measurement rang of senor
+
+```{r measurement rang}
+df <-  df %>%  
+  mutate(qc1 = if_else(temp > 70 | temp < -20,1,0)) 
+```
+
+#### 1.2 Respect to plausible rate of temperature change (1K)
+
+```{r rate of change}
+df <- df %>% 
+  mutate(qc2 = if_else(temp - lead(temp) > 1 |temp - lead(temp) < -1 ,1, 0))
+```
+
+#### 1.3 Respect to minimum temperature variability (Persistence)
+
+```{r persistence}
+df <- df %>% 
+  mutate(qc3 = if_else(temp - lag(temp, n = 1) == 0 &
+                         temp - lag(temp, n = 2) == 0 &
+                         temp - lag(temp, n = 3) == 0 &
+                         temp - lag(temp, n = 4) == 0 &
+                         temp - lag(temp, n = 5) == 0,
+                       1,0, missing = 1))
+```
+#### 2.4 Respect to light intensity
+
+```{r light intensity}
+df <- df %>%
+  
+  mutate(L1 = if_else(lux > 20000,1, 0)) %>% 
+  mutate(L1adj = rollapply(L1, 3, sum, fill= 1)) %>% 
+  mutate(qc4 = if_else(L1adj != 0, 1,0)) %>% 
+  select(- c(L1, L1adj)) %>% 
+  
+  mutate(L2 = if_else(lux > 30000,1, 0)) %>% 
+  mutate(L2adj = rollapply(L2, 7, sum, fill= 1)) %>% 
+  mutate(qc5 = if_else(L2adj != 0, 1, 0)) %>% 
+  select(- c(L2, L2adj))
+```
+
+
+
+```{r lux historgam}
+df %>% 
+  mutate(p = percent_rank(lux)) %>% 
+  ggplot(mapping = aes(x = lux, y = p)) +
+  geom_line()
+  
+  
+  
+df %>% mutate(p = percent_rank(lux)) %>% 
+  tail()
+```
+
+
+## 2. Flagging system
+
+```{r flag}
+df <- df %>% 
+  rowwise() %>% 
+  mutate(
+    flag = max(c(qc1, qc2, qc3, qc4, qc5)))
+```
+
+```{r hourly flags and averages}
+dfh <- df %>%
+  mutate(date = date(date_time), .after = 'date_time') %>% 
+  mutate(hour = hour(date_time), .after = 'date') %>%
+  group_by(date, hour) %>%
+  summarise(flag_h = if_else(sum(flag) >1, 1,0), 
+            th = ifelse(flag_h != 0, NA, mean(temp))) %>% 
+  add_column(date_time = seq(ymd_hm('2020-11-30 00:00'),
+                             ymd_hm('2020-12-20 23:00'),
+                             by = '1 hour'), 
+             .before = 'date') %>% 
+  mutate(origin = ifelse(is.na(th), "R", "H")) %>% 
+  ungroup()
+```
+
+## 3. Regression Model
+
+#### 3.1 Reference sattions
+
+```{r import reference staions}
+rs_wbi <- read_delim("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/WBI Stunde_096.csv",
+                    delim = ';',
+                    locale=locale(decimal_mark = ","),
+                    col_types = cols( 
+                      Tag = col_date(format = "%d.%m.%Y"),
+                      Stunde = col_time(format = "%H:%M"),
+                      AVG_TA200 = col_double()
+))
+rs_wbi <- rs_wbi %>% rename(date = Tag, hour = Stunde, th = AVG_TA200)
+#______________________________________________________________________________
+rs_umg <- read_csv("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/Freiburg_Garten_2020-11-30_2020-12-20.csv")
+rs_umg <- rs_umg %>% rename(date_time = UTC, th = `Lufttemperatur (°C)`) %>% 
+  select(- Lokalzeit)
+#______________________________________________________________________________
+rs_dwdfu <- read_delim("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/produkt_air_temperature_13667_akt.txt", 
+                       delim = ";",
+                       escape_double = FALSE,
+                       col_types = cols(
+                         MESS_DATUM = col_datetime(format = "%Y%m%d%H")),
+                       trim_ws = TRUE)
+rs_dwdfu <- rs_dwdfu %>% rename(date_time = MESS_DATUM,
+                    th = LUFTTEMPERATUR) %>%
+  select(date_time,th) %>% 
+  filter(date_time >= as.Date("2020-11-30"), 
+         date_time < as.Date("2020-12-21"))
+#______________________________________________________________________________
+rs_dwdff <- read_delim("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/reference stations/produkt_tu_stunde_20190713_20210112_01443.txt",
+                       delim = ";",
+                       escape_double = FALSE,
+                       col_types = cols(
+                         MESS_DATUM = col_datetime(format = "%Y%m%d%H")),
+                       trim_ws = TRUE)
+rs_dwdff <- rs_dwdff %>% rename(date_time = MESS_DATUM,
+                    th = TT_TU) %>%
+  select(date_time,th) %>% 
+  filter(date_time >= as.Date("2020-11-30"), 
+         date_time < as.Date("2020-12-21"))
+```
+
+#### 3.2 Regression model
+
+```{r Modeling th, include=FALSE}
+model_wbi <- lm(dfh$th ~ rs_wbi$th)
+summary(model_wbi)
+# R2 = 0.8942
+model_umg <- lm(dfh$th ~ rs_umg$th)
+summary(model_umg)
+# R2 = 0.9231
+model_dwdfu <- lm(dfh$th ~ rs_dwdfu$th)
+summary(model_dwdfu)
+# R2 = 0.8881
+model_dwdff <- lm(dfh$th ~ rs_dwdff$th)
+summary(model_dwdff)
+# R2 = 0.7705
+```
+
+#### 3.3 Relationship - HOBO and reference station
+
+```{r Any NAS}
+
+dfh_umg <- dfh %>%  
+  mutate(th = ifelse(is.na(th),
+         predict(model_umg,
+                 newdata = rs_umg),
+         th)) %>%
+  select(date_time, th, origin) %>% 
+  rename(date = date_time)
+any(is.na(dfh_umg$th))
+
+```
+
+```{r final data exploration}
+
+dfh_umg %>% 
+  ggplot(mapping = aes(x = date,
+                       y = th,
+                       color = th,
+                       fill = th)) %>% 
+  + geom_line() + scale_color_gradient2(low = "blue",
+  mid = "black",
+  high = "red",
+  midpoint = 0)
+```
+
+
+## 4. Hourly series
+
+
+```{r uploading data into github}
+write.csv(dfh_umg,
+          'C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/10347371_TH.csv', row.names = FALSE , quote=F)
+```
+
+
