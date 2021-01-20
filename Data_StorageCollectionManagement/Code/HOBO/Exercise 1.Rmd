@@ -1,0 +1,99 @@
+---
+title: "HOBO Exercise 1"
+author: "Neisse Niklas_ neisse.n@protonmail.com"
+date: "20/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Setting stage
+
+Packages in use
+
+```{r packages, message=FALSE, warning=FALSE}
+
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(rmarkdown)
+library(rio)
+library(zoo) # rollapply
+library(dygraphs)
+
+```
+
+Loading-in data
+
+```{r data upload, message=FALSE, warning=FALSE}
+
+sessionInfo()
+rm(list=ls(all=TRUE))
+hoboraw <- read_csv("C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/10347371_2020.12.21_15.26.csv")
+hoboraw <- as.tibble(hoboraw)
+
+```
+
+
+
+```{r}
+
+# 
+hoboraw$`Date Time, GMT+01:00` <- as.POSIXct(hoboraw$`Date Time, GMT+01:00`, format="%d/%m/%Y %H:%M:%OS")
+#view(hoboraw)
+
+# period subset 
+hobop<- hoboraw[hoboraw$`Date Time, GMT+01:00` >= '2020/11/30 00:00:00' & 
+                  hoboraw$`Date Time, GMT+01:00` <= '2020/12/20 23:50:00',]
+
+
+# removeing unwanted columns
+
+
+
+hobop <- hobop %>% select(-'Bad Battery (LGR S/N: 10347371)')
+hobop <- hobop %>% select(-('Coupler Attached (LGR S/N: 10347371)':'End Of File (LGR S/N: 10347371)'))
+
+
+# renameing columns
+
+names(hobop) <- c('id','date_time','temp','lux')
+
+
+# assigning new id's 
+
+#hobop$id <- c(1:3024)
+hobop$id <- c(1:nrow(hobop))
+
+
+hobop$`date_time` <- as.POSIXct(hobop$`date_time`, format="%Y-%m-%d %H:%M:%OS")
+
+
+str(hobop)
+
+```
+
+
+# data exploration
+
+```{r}
+
+plot(hobop$date_time, hobop$lux)
+
+```
+
+# exporting dataframe and verifying data file
+
+```{r}
+
+write.csv(hobop,'C:/Users/NeoN/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/10347371.csv', row.names = FALSE , quote=F)
+
+dat <- read.csv('C:/Users/Neon/Desktop/2020FreiburgEnvironmentalSciences/Semester/Semester1/Data- Storage Collection & Managment/data/raw-data/10347371.csv')
+
+```
+
+
+
