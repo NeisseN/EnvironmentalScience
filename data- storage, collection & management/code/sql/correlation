@@ -1,0 +1,31 @@
+SELECT *
+FROM 
+(SELECT value AS v21,
+		close_meta20_id,
+		meta21_id,
+ 		tstamp,
+ 		row_number() OVER(PARTITION BY meta21_id ORDER BY tstamp) AS rownum21
+ 
+	FROM data, df_close as dfc
+	WHERE meta_id=dfc.meta21_id
+ 	ORDER BY meta21_id
+	LIMIT 1250
+) AS vv21
+	
+JOIN
+(
+	SELECT value AS v20,
+		close_meta20_id,
+		meta21_id,
+ 		tstamp,
+		row_number() OVER(PARTITION BY meta21_id ORDER BY tstamp) AS rownum20
+	
+	FROM data, df_close as dfc
+	WHERE meta_id=dfc.close_meta20_id
+	ORDER BY meta21_id
+	LIMIT 1250
+) AS vv20
+ON vv21.rownum21=vv20.rownum20;
+
+SELECT *
+FROM df_close
