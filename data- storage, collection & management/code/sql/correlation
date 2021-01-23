@@ -1,31 +1,87 @@
-SELECT *
-FROM 
-(SELECT value AS v21,
-		close_meta20_id,
-		meta21_id,
- 		tstamp,
- 		row_number() OVER(PARTITION BY meta21_id ORDER BY tstamp) AS rownum21
- 
-	FROM data, df_close as dfc
-	WHERE meta_id=dfc.meta21_id
- 	ORDER BY meta21_id
-	LIMIT 1250
-) AS vv21
-	
-JOIN
-(
-	SELECT value AS v20,
-		close_meta20_id,
-		meta21_id,
- 		tstamp,
-		row_number() OVER(PARTITION BY meta21_id ORDER BY tstamp) AS rownum20
-	
-	FROM data, df_close as dfc
-	WHERE meta_id=dfc.close_meta20_id
-	ORDER BY meta21_id
-	LIMIT 1250
-) AS vv20
-ON vv21.rownum21=vv20.rownum20;
+DROP VIEW IF EXISTS temp_indices CASCADE;  
+CREATE VIEW temp_indices AS 
+SELECT 
+    meta_id,
+    t_avg,
+    day_temp,
+    night_temp,
+    day_temp - night_temp AS diff
+FROM
+    (SELECT
+    *,
+    td.day_temp - tn.night_temp AS diff
+    FROM
+        (SELECT 
+        meta_id,
+        AVG(value) AS day_temp
+        FROM dfv
+        WHERE (date_part('hour', tstamp ) >= '6' 
+        AND date_part('hour', tstamp) < '18')
+        GROUP BY meta_id) as td
 
-SELECT *
-FROM df_close
+    JOIN 
+
+        (SELECT 
+        meta_id AS id_tn,
+        AVG(value) night_temp
+        FROM dfv
+        WHERE (date_part('hour', tstamp ) < '6' 
+        OR date_part('hour', tstamp) >= '18')
+        GROUP BY meta_id) as tn
+
+    ON tn.id_tn=td.meta_id
+    JOIN
+
+        (SELECT 
+        meta_id AS id_t_avg,
+        AVG(value) AS t_avg
+        FROM dfv
+        GROUP BY meta_id
+        ) toavg
+
+    ON toavg.id_t_avg=td.meta_id
+    ) AS t1;
+
+DROP VIEW IF EXISTS df_close CASCADE;
+CREATE VIEW df_close AS
+    (SELECT
+        id AS meta21_id, 
+        (SELECT id FROM metadata ly WHERE term_id=9 ORDER BY st_distance(m.location, ly.location) ASC LIMIT 1) as close_meta20_id,
+        (SELECT id FROM metadata ly WHERE term_id=7 ORDER BY st_distance(m.location, ly.location) ASC LIMIT 1) as close_meta19_id
+    FROM metadata m
+    WHERE term_id=11 AND sensor_id=1
+    );
+
+
+DROP VIEW IF EXISTS data_2 CASCADE;
+CREATE VIEW data_2 AS
+    (SELECT
+        *,
+        value - AVG(value) OVER (PARTITION BY meta_id) AS t_norm,
+        row_number() OVER (PARTITION BY meta_id ORDER BY meta_id) AS rownum
+    FROM data);
+
+
+DROP VIEW IF EXISTS corr CASCADE;
+CREATE VIEW corr AS
+    (SELECT 
+        meta21_id, 
+        corr(d.t_norm, d19.t_norm) AS correlation_2019,
+        corr(d.t_norm, d20.t_norm) AS correlation_2020
+    FROM data_2 d                                    
+        JOIN df_close on df_close.meta21_id = d.meta_id    
+        JOIN metadata m19 on df_close.close_meta19_id=m19.id
+        JOIN metadata m20 on df_close.close_meta20_id=m20.id
+        JOIN data_2 d19 on m19.id=d19.meta_id AND d.rownum=d19.rownum
+        JOIN data_2 d20 on m20.id=d20.meta_id AND d.rownum=d20.rownum
+    GROUP BY df_close.meta21_id);
+
+
+DROP VIEW IF EXISTS overall;
+CREATE VIEW overall AS
+SELECT * FROM temp_indices
+JOIN corr
+ON
+temp_indices.meta_id = corr.meta21_id;
+
+SELECT * FROM overall
