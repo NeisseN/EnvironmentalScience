@@ -1,0 +1,179 @@
+---
+title: "Exercise 01 RbasicsT1"
+author: "Neisse Niklas_ neisse.n@protonmail.com"
+date: "25/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Setting stage
+
+```{r packages}
+
+library(tidyverse)
+
+```
+
+1. create a vector containing the names of 5 tree species
+
+```{r}
+
+species <- c('Thuja plicata','Tsuga canadensis','Pinus aristata','Xanthocyparis nootkatensis','Fagus grandifolia')
+
+```
+
+2. create a vector containing the integers between 2 and 6 by two different R-ways
+
+```{r}
+
+intbet1 <- c(2:6)
+intbet2 <-  seq(2,6)
+
+```
+
+3. create a vector containing 5 uniformly distributed random numbers
+
+```{r}
+
+unif1 <- runif(5)
+
+```
+
+4. create a vector containing 5 randomly chosen values between 35 and 77 (uniformlyd istributed), e.g. the tree diameter in breast height
+
+```{r}
+
+unif2 <- runif(5, 35, 77)
+
+```
+
+5. create a vector containing 5 randomly chosen values with arithmetic average of 50 and
+standard deviation of 15
+
+```{r}
+
+nrmrmd <- rnorm(5,50,15)
+
+```
+
+6. create a vector with 6 integer numbers
+
+```{r}
+
+int1 <- seq(1,6)
+
+```
+
+7. remove the 6th entry of the vector
+
+```{r}
+
+int1[-6]
+
+```
+
+8. put together the vectors 1, 2, and 5 into a data frame with meaningful column names
+
+```{r}
+
+df1 <- c(data.frame('species' = species, 'id' = intbet1, 'dbh' = nrmrmd))
+
+```
+
+9. put together the vectors 1,2, and 5 into a list
+
+```{r}
+
+lst1 <- c(list('species' = species, 'id' = intbet1, 'dbh' = nrmrmd))
+
+```
+
+10. explore differences between 8. and 9.
+
+There is no difference between object 8. and 9. 
+Lists are the most flexible datastructure in R. 
+  A colection of elements without any restrictions on the class.
+Dataframes are lists with following restrictions:
+  - two variables cannot have the same name
+  - all elements are vectors
+  - all elements have an equal lenght
+
+11. access the diameter of tree 3 in the data frame by two different R-ways
+
+```{r}
+
+df1[[3]][3]
+
+df1 %>% 
+  as.tibble %>% 
+  filter(id == '3') %>% 
+  select(dbh)
+
+```
+
+12. access the dbh vector of the list
+
+```{r}
+
+df1 %>% 
+  as.tibble %>% 
+  select(dbh)
+
+```
+
+13. access the diameter of the third tree in the list using different R-ways
+
+see 11.
+
+14. multiply all diameters of trees with 1.2, when the diameter is larger than 50 cm by using the ifelse() function
+
+```{r}
+
+df1 %>% 
+  as.tibble %>% 
+  mutate(dbh1.2 = ifelse(dbh > 50, dbh * 1.2, dbh))
+
+ifelse(df1$dbh > 50, df1$dbh * 1.2, df1$dbh)
+
+```
+
+15. do the same process by using a for-loop and if – else branching
+
+```{r}
+
+ # does't work
+
+for (dbh in df1) {
+  if(dbh > 50){dbh = dbh * 1.2} else{dbh = dbh}
+}
+
+```
+
+16. program a simple example for a while-loop, a for-loop, and a while-loop, a repeat-loop and try the break command
+
+```{r}
+
+
+```
+
+17. add a row with a 6th tree species to your data frame
+
+```{r}
+
+df1 %>% 
+  as.tibble %>% 
+  add_row(species = 'Betula papyrifera')
+
+```
+
+18. create a matrix with random integers between 0 and 1000 with 3 colums and 6 rows
+
+```{r}
+
+m1 <- cbind(as.integer(runif(6,0,1000)),as.integer(runif(6,0,1000)),as.integer(runif(6,0,1000)))
+
+```
+
