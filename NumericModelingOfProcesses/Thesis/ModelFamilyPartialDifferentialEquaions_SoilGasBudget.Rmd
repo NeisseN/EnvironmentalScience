@@ -81,9 +81,10 @@ steadystate <- function(times, c_o2, parameters){
 
 ```
 
+
 ```{r function parameters}
 
-parameters_c1_60_o <- list(
+parameters_c1_160 <- list(
 p_c_o2_atm <- 20.948/100, # relative concentration % / 100
 p_I <- 45,
 p_del_x <- 1,
@@ -165,13 +166,15 @@ p_ds <- c(
   # depth dependent air-filled pore-space correction (Kühne et al. 2012)
 p_eps <- c(rep(0.3, 10),rep(0.26, 10), rep(0.19, 10), rep(0.12, 10), rep(0.09, 5)),
 
-p_q10 <- 3.3
+p_q10 <- rep(3.3, p_I)
 )
 
   #accessing a specific parameter out of the list
 #parameters_c1_60_o[[4]]
 
 ```
+
+
 ```{r global parameters}
 
   # steady-state state variable, 45 depth compartments with a O2 concentration of (0.1 %/100)
@@ -194,19 +197,19 @@ out_func_ode <- ode.band(
     #func is the set of derivations, here we derive mainly time (t)
   func = steadystate, 
     #parms are the necessary parameters/constants
-  parms = parameters_c1_60_o,
+  parms = parameters_c1_160,
     #nspec is the number of species/components
   nspec = 1, 
   names = "steadystate"
   )
 
   # Steady-state solver for ordinary differential equations
-out_func_steady <- steady.band(
+out_func_steady_1000 <- steady.band(
   y = sstate,
     # time-step for which steady state is wanted
   times = 1000,
   func = steadystate, 
-  parms = parameters_c1_60_o, 
+  parms = parameters_c1_160, 
   nspec = 1)
 
 ```
@@ -215,36 +218,55 @@ out_func_steady <- steady.band(
 
 #mbm needs two functions passed and gives the speed of execution
   #obviously this is dependent on the computer
-microbenchmark(ode.band(y = sstate, 
-    #times is the sequence of output
-  times = time,
-    #func is the set of derivations, here we derive mainly time (t)
-  func = steadystate, 
-    #parms are the necessary parameters/constants
-  parms = parameters_c1_60_o,
-    #nspec is the number of species/components
-  nspec = 1, 
-  names = "steadystate"
-  ), 
-   steady.band(
-  y = sstate,
-    # time-step for which steady state is wanted
-  times = 1000,
-  func = steadystate, 
-  parms = parameters_c1_60_o, 
-  nspec = 1)
+microbenchmark(ode.band(y = sstate, times = time,
+                        func = steadystate, 
+                        parms = parameters_c1_160_o, 
+                        nspec = 1,
+                        names = "steadystate")
+               , 
+               steady.band(y = sstate, times = 1000, 
+                           func = steadystate, 
+                           parms = parameters_c1_160, 
+                           nspec = 1)
                )
 
 ```
 
-```{r function_q10}
+```{r function steadystate_q10}
 
-steadystate_q10 <- function(t, c_o2, parameters){
+steadystate_q10 <- function(times, c_o2, parameters){
   
-  flux    <- c(-p_ds*diff(c(p_c_o2_atm, rep(c_o2, p_I-2)))/p_delta_x, 0) 
-  d_c_o2 <- -diff(flux)/diff(t)/p_eps + p_S*p_q10/p_eps 
+  flux    <- c(-p_ds*diff(c(p_c_o2_atm, c_o2))/p_delta_x, 0) 
+  d_c_o2 <- -diff(flux)/p_eps + p_S*p_q10/p_eps 
   
   list(d_c_o2)
 }
+
+```
+
+```{r MOL q10}
+
+out_func_steady_q10_1000 <- steady.band(y = sstate, 
+                                        time = 1000, 
+                                        func = steadystate_q10, 
+                                        parms = parameters_c1_160, 
+                                        nspec = 1)
+```
+
+```{r}
+
+data.frame(d_c_o2 = out_func_steady_1000$y) %>% 
+  mutate(depth = c(1:45)) %>% 
+  ggplot(.) + 
+  geom_line(aes(x = d_c_o2*100, y = depth)) +
+  scale_y_reverse() +
+  xlim(15,21)
+
+data.frame(d_c_o2 = out_func_steady_q10_1000$y) %>% 
+  mutate(depth = c(1:45)) %>% 
+  ggplot(.) + 
+  geom_line(aes(x = d_c_o2*100, y = depth)) +
+  scale_y_reverse() +
+  xlim(15,21)
 
 ```
