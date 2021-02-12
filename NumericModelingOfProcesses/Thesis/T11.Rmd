@@ -1,0 +1,313 @@
+---
+title: "ModelFamilyPartialDifferentialEquaions_SoilGasBudget"
+author: "Neisse Niklas_ neisse.n@protonmail.com"
+date: "12/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r set-up}
+
+rm(list = ls())
+
+library('tidyverse')
+library('deSolve')
+library('rootSolve')
+library('microbenchmark')
+```
+
+```{r data}
+
+## Parameters of the 1 dimensional $O_2$ concentration model 
+##  (Schack-Kirchner & Hildebrand (1998))
+
+# Treatment (C1 = natural, B1 = acidic, C2 = alkaline), 
+# site = water desorption status (30 = wet, 160 = field-site),
+# horizon,
+# horizon dependent temperature,
+# gas-diffusion ($D_s/D_O$) - and respiration coefficients
+
+df <- data.frame(
+  treatment = as.factor(c(rep('C1', 8), rep('B1', 8), rep('C2', 8))),
+  site = c(rep(30,4),rep(160,4)), # [hPa]
+  horizion = rep(as.factor(c('O', 'Aeh', 'Ah(1)', 'A1')), 6),
+  temperature = c(15, 12, 11, 11), #  [°C]
+  dsd0 = c(0.0252, 0.0019, 0.0101, 0.0056,
+           0.140, 0.021, 0.025, 0.027,
+           0.0439, 0.0055, 0.0015, 0.0056,
+           0.163, 0.028, 0.027, 0.027,
+           0.2600, 0.0196, 0.0098, 0.0056,
+           0.285, 0.046, 0.025, 0.027),
+  respiration = c(0.155, 0.136, 0.175, 0.045, # [nl sec-1 cm-3]
+                    0.958, 0.298, 0.292, 0.073,
+                    0.297, 0.240, 0.045, 0.045,
+                    1.007, 0.358, 0.376, 0.073,
+                    1.280, 0.249, 0.097, 0.045,
+                    1.455, 0.424, 0.282, 0.073)
+  ) %>%
+  as_tibble(df)
+
+# Horizon look-up table for depths and temperatures of measurement 
+lut01 <- data.frame(
+  horizion = as.factor(c('O', 'Aeh', 'Ah(1)', 'A1')),
+  'depth' = as.factor(c('+3-0', '0-5', '5-10', '10-40')), # [cm]
+  'temperature' = c(15, 12, 11, 11) # [°C]
+  )
+
+```
+
+```{r conversion}
+
+# from nl*cm3-1*sec-1 to cm3*cm3-1*sec-1
+conv_nl_to_m3 <- function(nl_cm3_sec){
+  cm3_cm3_sec <- nl_cm3_sec * 1E-6
+  return(cm3_cm3_sec)
+}
+
+```
+
+```{r function}
+
+steadystate <- function(times, c_o2, parameters){
+  
+  flux    <- c(-p_ds*diff(c(p_c_o2_atm, c_o2))/p_delta_x, 0) 
+  d_c_o2 <- -diff(flux)/p_eps + p_S/p_eps 
+  
+  list(d_c_o2)
+}
+
+```
+
+
+```{r function parameters}
+
+parameters_c1_160 <- list(
+p_c_o2_atm <- 20.948/100, # relative concentration % / 100
+p_I <- 45,
+p_del_x <- 1,
+p_delta_x  <- c(0.5, rep(p_del_x, p_I-2), 0.5),
+p_S <- c(
+  rep(
+    -1*(conv_nl_to_m3(df %>% 
+                       filter(treatment == 'C1',
+                              site == '160',
+                              horizion == 'O') %>% 
+                       select(respiration)
+                      )
+        )[[1]], 5),
+  rep(
+    -1*(conv_nl_to_m3(df %>% 
+                       filter(treatment == 'C1',
+                              site == '160',
+                              horizion == 'Aeh') %>% 
+                       select(respiration)
+                      )
+        )[[1]], 5),
+  rep(
+    -1*(conv_nl_to_m3(df %>% 
+                       filter(treatment == 'C1',
+                              site == '160',
+                              horizion == 'Ah(1)') %>% 
+                       select(respiration)
+                      )
+        )[[1]], 5),
+  rep(
+    -1*(conv_nl_to_m3(df %>% 
+                       filter(treatment == 'C1',
+                              site == '160',
+                              horizion == 'A1') %>% 
+                       select(respiration)
+                      )
+        )[[1]], 30)
+  ),
+
+  #The diffusion coefficient (D_0) is constant in a ternary N2,O2,CO2 mixture
+p_d0 <- 0.18,
+
+  #the apparent diffusion coefficient (D_S) as a vector of relative apparent gaseous diffusion coefficient (D_S/D_0) times the diffusion coefficient (D_0) for each horizon with its depth compartments
+p_ds <- c(
+  rep(
+    (df %>% 
+       filter(treatment == 'C1',
+              site == '160',
+              horizion == 'O') %>% 
+       select(dsd0)
+     )[[1]]*p_d0, 5
+    ),
+  rep(
+    (df %>% 
+       filter(treatment == 'C1',
+              site == '160',
+              horizion == 'Aeh') %>% 
+       select(dsd0)
+     )[[1]]*p_d0, 5
+    ),
+  rep(
+    (df %>% 
+       filter(treatment == 'C1',
+              site == '160',
+              horizion == 'Ah(1)') %>% 
+       select(dsd0)
+     )[[1]]*p_d0, 5
+    ),
+  rep(
+    (df %>% 
+       filter(treatment == 'C1',
+              site == '160',
+              horizion == 'A1') %>% 
+       select(dsd0)
+     )[[1]]*p_d0, 30
+    )
+  ),
+  
+  # depth dependent air-filled pore-space correction (Kühne et al. 2012)
+p_eps <- c(rep(0.3, 10),rep(0.26, 10), rep(0.19, 10), rep(0.12, 10), rep(0.09, 5)),
+
+p_q10 <- rep(3.3, p_I)
+)
+
+  #accessing a specific parameter out of the list
+#parameters_c1_60_o[[4]]
+
+```
+
+
+```{r global parameters}
+
+  # steady-state state variable, 45 depth compartments with a O2 concentration of (0.1 %/100)
+    # with name attribute (c_02_i)
+sstate <- c(c_o2_ = rep(0.1,p_I)) 
+
+  # 1000 time-step intervals
+time <- seq(0, 1000, by = 1)  
+
+```
+
+```{r MOL}
+
+  # Solver for ordinary differential equations 
+out_func_ode <- ode.band(
+    # y is the state variable(s), here 45 compartments
+  y = sstate, 
+    #times is the sequence of output
+  times = time,
+    #func is the set of derivations, here we derive mainly time (t)
+  func = steadystate, 
+    #parms are the necessary parameters/constants
+  parms = parameters_c1_160,
+    #nspec is the number of species/components
+  nspec = 1, 
+  names = "steadystate"
+  )
+
+  # Steady-state solver for ordinary differential equations
+out_func_steady_1000 <- steady.band(
+  y = sstate,
+    # time-step for which steady state is wanted
+  times = 1000,
+  func = steadystate, 
+  parms = parameters_c1_160, 
+  nspec = 1)
+
+```
+
+```{r microbenchmarking}
+
+#mbm needs two functions passed and gives the speed of execution
+  #obviously this is dependent on the computer
+microbenchmark(ode.band(y = sstate, times = time,
+                        func = steadystate, 
+                        parms = parameters_c1_160_o, 
+                        nspec = 1,
+                        names = "steadystate")
+               , 
+               steady.band(y = sstate, times = 1000, 
+                           func = steadystate, 
+                           parms = parameters_c1_160, 
+                           nspec = 1)
+               )
+
+```
+
+```{r function steadystate_q10}
+
+data.frame(depth = c(1:45),
+           ode = out_func_ode[1001,2:46],
+           steady = out_func_steady_1000$y,
+           steady_q10 = out_func_steady_q10_1000$y
+           ) %>% 
+  pivot_longer(2:4, names_to = 'method', values_to = 'o2_vol') %>% 
+  ggplot(.) +
+  geom_line(aes(x = o2_vol, y = depth, color = method)) +
+  scale_y_reverse()
+  
+
+
+
+```
+
+
+```{r function steadystate_q10}
+
+steadystate_q10 <- function(times, c_o2, parameters){
+  
+  flux    <- c(-p_ds*diff(c(p_c_o2_atm, c_o2))/p_delta_x, 0) 
+  d_c_o2 <- -diff(flux)/p_eps + p_S*p_q10/p_eps 
+  
+  list(d_c_o2)
+}
+
+```
+
+```{r MOL q10}
+
+out_func_steady_q10_1000 <- steady.band(y = sstate, 
+                                        time = 1000, 
+                                        func = steadystate_q10, 
+                                        parms = parameters_c1_160, 
+                                        nspec = 1)
+```
+
+```{r}
+
+data.frame(d_c_o2 = out_func_steady_1000$y) %>% 
+  mutate(depth = c(1:45)) %>% 
+  ggplot(.) + 
+  geom_line(aes(x = d_c_o2*100, y = depth)) +
+  scale_y_reverse() +
+  xlim(15,21)
+
+data.frame(d_c_o2 = out_func_steady_q10_1000$y) %>% 
+  mutate(depth = c(1:45)) %>% 
+  ggplot(.) + 
+  geom_line(aes(x = d_c_o2*100, y = depth)) +
+  scale_y_reverse() +
+  xlim(15,21)
+
+```
+
+
+out <- ifelse(SteadyState == T
+                ,
+                steady.band(y = sstate,
+                            # time-step for which steady state is wanted
+                            times = 1000,
+                            func = steadystate,
+                            parms = parameters_c1_160,
+                            nspec = 1)
+                ,
+                ode.band(
+                           # y is the state variable(s), here 45 compartments
+                         y = sstate, 
+                           #times is the sequence of output
+                         times = time,
+                           #func is the set of derivations, here we derive mainly time (t)
+                         func = steadystate, 
+                           #parms are the necessary parameters/constants
+                         parms = parameters_c1_160,
+                           #nspec is the number of species/components
+                         nspec = 1, 
+                         names = "steadystate")
