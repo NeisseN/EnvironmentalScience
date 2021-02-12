@@ -24,13 +24,6 @@ library('microbenchmark')
 ## Parameters of the 1 dimensional $O_2$ concentration model 
 ##  (Schack-Kirchner & Hildebrand (1998))
 
-# Horizon look-up table for depths and temperatures of measurement 
-lut01 <- data.frame(
-  horizion = as.factor(c('O', 'Aeh', 'Ah(1)', 'A1')),
-  'depth' = as.factor(c('+3-0', '0-5', '5-10', '10-40')), # [cm]
-  'temperature' = c(15, 12, 11, 11) # [°C]
-  )
-
 # Treatment (C1 = natural, B1 = acidic, C2 = alkaline), 
 # site = water desorption status (30 = wet, 160 = field-site),
 # horizon,
@@ -56,6 +49,13 @@ df <- data.frame(
                     1.455, 0.424, 0.282, 0.073)
   ) %>%
   as_tibble(df)
+
+# Horizon look-up table for depths and temperatures of measurement 
+lut01 <- data.frame(
+  horizion = as.factor(c('O', 'Aeh', 'Ah(1)', 'A1')),
+  'depth' = as.factor(c('+3-0', '0-5', '5-10', '10-40')), # [cm]
+  'temperature' = c(15, 12, 11, 11) # [°C]
+  )
 
 ```
 
@@ -175,7 +175,8 @@ p_q10 <- 3.3
 ```{r global parameters}
 
   # steady-state state variable, 45 depth compartments with a O2 concentration of (0.1 %/100)
-sstate <- c(c_o2 = rep(0.1,p_I)) 
+    # with name attribute (c_02_i)
+sstate <- c(c_o2_ = rep(0.1,p_I)) 
 
   # 1000 time-step intervals
 time <- seq(0, 1000, by = 1)  
@@ -200,11 +201,13 @@ out_func_ode <- ode.band(
   )
 
   # Steady-state solver for ordinary differential equations
-out_func_steady <- steady.band(y = sstate, 
-                            times = time,
-                            func = steadystate, 
-                            parms = parameters_c1_60_o, 
-                            nspec = 1)
+out_func_steady <- steady.band(
+  y = sstate,
+    # time-step for which steady state is wanted
+  times = 1000,
+  func = steadystate, 
+  parms = parameters_c1_60_o, 
+  nspec = 1)
 
 ```
 
@@ -212,17 +215,31 @@ out_func_steady <- steady.band(y = sstate,
 
 #mbm needs two functions passed and gives the speed of execution
   #obviously this is dependent on the computer
-microbenchmark(ode.band(sstate, time, steadystate, parms = parameters_c1_60_o, 
-                  nspec = 1, names = "steadystate"), 
-               steady.band(sstate, time, steadystate, parms = parameters_c1_60_o, 
-                  nspec = 1, names = "steadystate")
+microbenchmark(ode.band(y = sstate, 
+    #times is the sequence of output
+  times = time,
+    #func is the set of derivations, here we derive mainly time (t)
+  func = steadystate, 
+    #parms are the necessary parameters/constants
+  parms = parameters_c1_60_o,
+    #nspec is the number of species/components
+  nspec = 1, 
+  names = "steadystate"
+  ), 
+   steady.band(
+  y = sstate,
+    # time-step for which steady state is wanted
+  times = 1000,
+  func = steadystate, 
+  parms = parameters_c1_60_o, 
+  nspec = 1)
                )
 
 ```
 
 ```{r function_q10}
 
-steadystate <- function(t, c_o2, parameters){
+steadystate_q10 <- function(t, c_o2, parameters){
   
   flux    <- c(-p_ds*diff(c(p_c_o2_atm, rep(c_o2, p_I-2)))/p_delta_x, 0) 
   d_c_o2 <- -diff(flux)/diff(t)/p_eps + p_S*p_q10/p_eps 
