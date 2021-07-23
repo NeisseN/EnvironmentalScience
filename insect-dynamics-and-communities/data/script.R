@@ -56,7 +56,13 @@ count_order %>%
   summarise(div_order = n(), div_pu = sum(pu_count))
 
 
-##
+## 
+pudiv_trap <- df %>% 
+  group_by(pu, trap) %>% 
+  summarise(n = n()) %>% 
+  spread(trap,n)
+
+
 length(which(!is.na(pudiv_trap$`colored pan`) 
       & !is.na(pudiv_trap$malaise)
       & !is.na(pudiv_trap$sweep)))
@@ -84,6 +90,8 @@ count(df, order, sort = T) %>%
   theme_classic()
 
 ## 
+count_order %>% 
+  ggplot(aes(trap, ))
 
 
 ## PU diversity Venn diagram
